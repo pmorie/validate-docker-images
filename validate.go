@@ -44,14 +44,18 @@ type ValidateResult struct {
 
 var htmlTitleExp = regexp.MustCompile(`<title>([^<]+)</title>`)
 
-func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
+func (req ValidateHttpRequest) validate() error {
 	if req.Port == "" {
-		return nil, errors.New("port must be provided")
+		return errors.New("port must be provided")
 	}
 	if len(req.Responses) == 0 {
-		return nil, errors.New("allowed http responses must be provided")
+		return errors.New("allowed http responses must be provided")
 	}
 
+	return nil
+}
+
+func (req ValidateHttpRequest) log() {
 	if req.Verbose {
 		log.Printf("Validating container %s for http:\n", req.ContainerID)
 		log.Printf("Port: %s\n", req.Port)
@@ -59,7 +63,15 @@ func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
 		log.Printf("Title: %s\n", req.Title)
 		log.Printf("Allowed responses: %+v\n", req.Responses)
 	}
+}
 
+func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
+	err := req.validate()
+	if err != nil {
+		return nil, err
+	}
+
+	req.log()
 	result := &ValidateResult{Valid: true}
 
 	dockerClient, err := docker.NewClient(req.DockerSocket)
@@ -72,14 +84,45 @@ func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
 		return nil, err
 	}
 
-	mappedPort := container.NetworkSettings.Ports[docker.Port(req.Port)]
+	mappedPort, err := determineMappedPort(req, *container)
+	if err != nil {
+		result.Valid = false
+		result.Messages = append(result.Messages, err.Error())
+		return result, nil
+	}
+
+	url := requestUrl(req, *mappedPort)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	err = checkHttpResponse(req, *resp, result)
+
+	return result, nil
+}
+
+func ValidateHttps(req ValidateHttpRequest) (*ValidateResult, error) {
+	return nil, nil
+}
+
+func determineMappedPort(req ValidateHttpRequest, container docker.Container) (*docker.PortBinding, error) {
+	mappedPort, ok := container.NetworkSettings.Ports[docker.Port(req.Port)]
+	if ok == false {
+		return nil, errors.New("Container " + container.ID + " did not expose port " + req.Port)
+	}
+
 	if req.Verbose {
 		log.Printf("Container: %+v\n", container)
 		log.Printf("NetworkSettings: %+v\n", container.NetworkSettings)
 	}
-	log.Printf("Container has port %s mapped to %s:%s\n", req.Port, mappedPort[0].HostIp, mappedPort[0].HostPort)
 
-	url := "http://" + mappedPort[0].HostIp + ":" + mappedPort[0].HostPort
+	return &mappedPort[0], nil
+}
+
+func requestUrl(req ValidateHttpRequest, binding docker.PortBinding) string {
+	url := "http://" + binding.HostIp + ":" + binding.HostPort
 	if req.Path != "" {
 		if strings.HasPrefix(req.Path, "/") {
 			url += req.Path
@@ -88,12 +131,14 @@ func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
 		}
 	}
 
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	return url
+}
+
+func checkHttpResponse(req ValidateHttpRequest, resp http.Response, result *ValidateResult) error {
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
 
 	if req.Verbose {
 		log.Printf("Http response status code: %s\n", resp.Status)
@@ -118,12 +163,7 @@ func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
 			result.Valid = false
 			result.Messages = append(result.Messages, "Title did not match")
 		}
-
 	}
 
-	return result, nil
-}
-
-func ValidateHttps(req ValidateHttpRequest) (*ValidateResult, error) {
-	return nil, nil
+	return nil
 }
