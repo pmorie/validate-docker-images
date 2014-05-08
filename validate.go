@@ -1,6 +1,7 @@
 package vdc
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -44,6 +45,13 @@ type ValidateResult struct {
 var htmlTitleExp = regexp.MustCompile(`<title>([^<]+)</title>`)
 
 func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
+	if req.Port == "" {
+		return nil, errors.New("port must be provided")
+	}
+	if len(req.Responses) == 0 {
+		return nil, errors.New("allowed http responses must be provided")
+	}
+
 	if req.Verbose {
 		log.Printf("Validating container %s for http:\n", req.ContainerID)
 		log.Printf("Port: %s\n", req.Port)

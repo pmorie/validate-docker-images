@@ -25,6 +25,22 @@ func parseValidCodes(input string) ([]int, error) {
 	return intPorts, nil
 }
 
+func validateHttpArgs(httpReq vdc.ValidateHttpRequest, responseCodes string) bool {
+	ok := true
+
+	if httpReq.Port == "" {
+		log.Println("You must specify a port to check")
+		ok = false
+	}
+
+	if responseCodes == "" {
+		log.Println("You must specify valid http response codes")
+		ok = false
+	}
+
+	return ok
+}
+
 func Execute() {
 	var (
 		responseCodes string
@@ -41,6 +57,10 @@ func Execute() {
 	}
 	valCmd.PersistentFlags().StringVarP(&(httpReq.DockerSocket), "url", "U", "unix:///var/run/docker.sock", "Set the url of the docker socket to use")
 	valCmd.PersistentFlags().BoolVar(&(httpReq.Verbose), "verbose", false, "Enable verbose output")
+	valCmd.PersistentFlags().StringVarP(&(httpReq.Port), "port", "p", "", "Set the port to check")
+	valCmd.PersistentFlags().StringVar(&(httpReq.Path), "P", "", "Specify a path to validate with an HTTP request")
+	valCmd.PersistentFlags().StringVarP(&responseCodes, "responseCodes", "c", "", "A comma-delimited list of response codes")
+	valCmd.PersistentFlags().StringVarP(&(httpReq.Title), "title", "t", "", "Specify an HTML title to validate against")
 
 	tcpCmd := &cobra.Command{
 		Use:   "tcp CONTAINER_ID PORT",
@@ -56,17 +76,13 @@ func Execute() {
 		Short: "Test http connectivity to a container",
 		Long:  "Test http connectivity to a container",
 		Run: func(cmd *cobra.Command, args []string) {
-			httpReq.ContainerID = args[0]
-
-			if httpReq.Port == "" {
-				log.Println("You must specify a port to check")
-			} else if !strings.HasSuffix(httpReq.Port, "/tcp") {
-				httpReq.Port += "/tcp"
+			if !validateHttpArgs(httpReq, responseCodes) {
+				return
 			}
 
-			if responseCodes == "" {
-				log.Println("You must specify valid http response codes")
-				return
+			httpReq.ContainerID = args[0]
+			if !strings.HasSuffix(httpReq.Port, "/tcp") {
+				httpReq.Port += "/tcp"
 			}
 			codes, err := parseValidCodes(responseCodes)
 			if err != nil {
@@ -83,17 +99,34 @@ func Execute() {
 			log.Printf("Result: %b\n", res.Valid)
 		},
 	}
-	httpCmd.Flags().StringVarP(&(httpReq.Port), "port", "p", "", "Set the port to check")
-	httpCmd.Flags().StringVar(&(httpReq.Path), "P", "", "Specify a path to validate with an HTTP request")
-	httpCmd.Flags().StringVarP(&responseCodes, "responseCodes", "c", "", "A comma-delimited list of response codes")
-	httpCmd.Flags().StringVarP(&(httpReq.Title), "title", "t", "", "Specify an HTML title to validate against")
 	valCmd.AddCommand(httpCmd)
 
 	httpsCmd := &cobra.Command{
-		Use:   "https <container id> <PORT> <allowed responses>",
+		Use:   "https <container id>",
 		Short: "Test https connectivity to a container",
 		Long:  "Test https connectivity to a container",
 		Run: func(cmd *cobra.Command, args []string) {
+			if !validateHttpArgs(httpReq, responseCodes) {
+				return
+			}
+
+			httpReq.ContainerID = args[0]
+			if !strings.HasSuffix(httpReq.Port, "/tcp") {
+				httpReq.Port += "/tcp"
+			}
+			codes, err := parseValidCodes(responseCodes)
+			if err != nil {
+				log.Printf("Error parsing response codes: %s\n", err.Error())
+				return
+			}
+			httpReq.Responses = vdc.AllowedHttpResponses(codes)
+
+			res, err := vdc.ValidateHttps(httpReq)
+			if err != nil {
+				log.Printf("%s\n", err.Error())
+			}
+
+			log.Printf("Result: %b\n", res.Valid)
 		},
 	}
 	valCmd.AddCommand(httpsCmd)
