@@ -66,6 +66,21 @@ func (req ValidateHttpRequest) log() {
 }
 
 func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
+	return validateHttp(req, func(url string) (*http.Response, error) {
+		return http.Get(url)
+	})
+}
+
+func ValidateHttps(req ValidateHttpRequest) (*ValidateResult, error) {
+	return validateHttp(req, func(url string) (*http.Response, error) {
+		// TODO: implement https
+		return http.Get(url)
+	})
+}
+
+type requestMaker func(string) (*http.Response, error)
+
+func validateHttp(req ValidateHttpRequest, reqMaker requestMaker) (*ValidateResult, error) {
 	err := req.validate()
 	if err != nil {
 		return nil, err
@@ -92,7 +107,7 @@ func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
 	}
 
 	url := requestUrl(req, *mappedPort)
-	resp, err := http.Get(url)
+	resp, err := reqMaker(url)
 	if err != nil {
 		return nil, err
 	}
@@ -101,10 +116,6 @@ func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
 	err = checkHttpResponse(req, *resp, result)
 
 	return result, nil
-}
-
-func ValidateHttps(req ValidateHttpRequest) (*ValidateResult, error) {
-	return nil, nil
 }
 
 func determineMappedPort(req ValidateHttpRequest, container docker.Container) (*docker.PortBinding, error) {
