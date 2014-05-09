@@ -57,7 +57,6 @@ func (req ValidateHttpRequest) validate() error {
 
 func (req ValidateHttpRequest) log() {
 	if req.Verbose {
-		log.Printf("Validating container %s for http:\n", req.ContainerID)
 		log.Printf("Port: %s\n", req.Port)
 		log.Printf("Path: %s\n", req.Path)
 		log.Printf("Title: %s\n", req.Title)
@@ -66,21 +65,22 @@ func (req ValidateHttpRequest) log() {
 }
 
 func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
-	return validateHttp(req, func(url string) (*http.Response, error) {
-		return http.Get(url)
-	})
+	if req.Verbose {
+		log.Printf("Validating container %s for http:\n", req.ContainerID)
+	}
+
+	return validateHttp(req, false)
 }
 
 func ValidateHttps(req ValidateHttpRequest) (*ValidateResult, error) {
-	return validateHttp(req, func(url string) (*http.Response, error) {
-		// TODO: implement https
-		return http.Get(url)
-	})
+	if req.Verbose {
+		log.Printf("Validating container %s for https:\n", req.ContainerID)
+	}
+
+	return validateHttp(req, true)
 }
 
-type requestMaker func(string) (*http.Response, error)
-
-func validateHttp(req ValidateHttpRequest, reqMaker requestMaker) (*ValidateResult, error) {
+func validateHttp(req ValidateHttpRequest, secure bool) (*ValidateResult, error) {
 	err := req.validate()
 	if err != nil {
 		return nil, err
@@ -106,10 +106,12 @@ func validateHttp(req ValidateHttpRequest, reqMaker requestMaker) (*ValidateResu
 		return result, nil
 	}
 
-	url := requestUrl(req, *mappedPort)
-	resp, err := reqMaker(url)
+	url := requestUrl(req, secure, *mappedPort)
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		result.Valid = false
+		result.Messages = append(result.Messages, "Request failed: "+err.Error())
+		return result, nil
 	}
 	defer resp.Body.Close()
 
@@ -132,8 +134,13 @@ func determineMappedPort(req ValidateHttpRequest, container docker.Container) (*
 	return &mappedPort[0], nil
 }
 
-func requestUrl(req ValidateHttpRequest, binding docker.PortBinding) string {
-	url := "http://" + binding.HostIp + ":" + binding.HostPort
+func requestUrl(req ValidateHttpRequest, secure bool, binding docker.PortBinding) string {
+	protocol := "http"
+	if secure {
+		protocol = "https"
+	}
+
+	url := protocol + "://" + binding.HostIp + ":" + binding.HostPort
 	if req.Path != "" {
 		if strings.HasPrefix(req.Path, "/") {
 			url += req.Path

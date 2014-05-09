@@ -94,9 +94,18 @@ func Execute() {
 			res, err := vdc.ValidateHttp(httpReq)
 			if err != nil {
 				log.Printf("%s\n", err.Error())
+				return
 			}
 
-			log.Printf("Result: %b\n", res.Valid)
+			if !res.Valid {
+				log.Println("Container failed validation:")
+			} else {
+				log.Println("Container passed validation:")
+			}
+
+			for _, msg := range res.Messages {
+				log.Println(msg)
+			}
 		},
 	}
 	valCmd.AddCommand(httpCmd)
@@ -124,9 +133,18 @@ func Execute() {
 			res, err := vdc.ValidateHttps(httpReq)
 			if err != nil {
 				log.Printf("%s\n", err.Error())
+				return
 			}
 
-			log.Printf("Result: %b\n", res.Valid)
+			if !res.Valid {
+				log.Println("Container failed validation:")
+			} else {
+				log.Println("Container passed validation:")
+			}
+
+			for _, msg := range res.Messages {
+				log.Println(msg)
+			}
 		},
 	}
 	valCmd.AddCommand(httpsCmd)
