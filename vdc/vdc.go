@@ -41,10 +41,25 @@ func validateHttpArgs(httpReq vdc.ValidateHttpRequest, responseCodes string) boo
 	return ok
 }
 
+func handleResult(result *vdc.ValidateResult) {
+	if !result.Valid {
+		log.Println("Container failed validation:")
+	} else {
+		log.Println("Container passed validation:")
+	}
+
+	for _, msg := range result.Messages {
+		log.Println(msg)
+	}
+}
+
 func Execute() {
 	var (
+		port          string
 		responseCodes string
+		req           vdc.ValidateRequest
 		httpReq       vdc.ValidateHttpRequest
+		tcpReq        vdc.ValidateTcpRequest
 	)
 
 	valCmd := &cobra.Command{
@@ -55,9 +70,9 @@ func Execute() {
 			cmd.Usage()
 		},
 	}
-	valCmd.PersistentFlags().StringVarP(&(httpReq.DockerSocket), "url", "U", "unix:///var/run/docker.sock", "Set the url of the docker socket to use")
-	valCmd.PersistentFlags().BoolVar(&(httpReq.Verbose), "verbose", false, "Enable verbose output")
-	valCmd.PersistentFlags().StringVarP(&(httpReq.Port), "port", "p", "", "Set the port to check")
+	valCmd.PersistentFlags().StringVarP(&(req.DockerSocket), "url", "U", "unix:///var/run/docker.sock", "Set the url of the docker socket to use")
+	valCmd.PersistentFlags().BoolVar(&(req.Verbose), "verbose", false, "Enable verbose output")
+	valCmd.PersistentFlags().StringVarP(&port, "port", "p", "", "Set the port to check")
 	valCmd.PersistentFlags().StringVar(&(httpReq.Path), "P", "", "Specify a path to validate with an HTTP request")
 	valCmd.PersistentFlags().StringVarP(&responseCodes, "responseCodes", "c", "", "A comma-delimited list of response codes")
 	valCmd.PersistentFlags().StringVarP(&(httpReq.Title), "title", "t", "", "Specify an HTML title to validate against")
@@ -67,6 +82,20 @@ func Execute() {
 		Short: "Test connectivity to a container",
 		Long:  "Test connectivity to a container",
 		Run: func(cmd *cobra.Command, args []string) {
+			if !strings.HasSuffix(port, "/tcp") {
+				port += "/tcp"
+			}
+			tcpReq.ValidateRequest = req
+			tcpReq.Port = port
+			tcpReq.ContainerID = args[0]
+
+			result, err := vdc.ValidateTcp(tcpReq)
+			if err != nil {
+				log.Printf("%s\n", err.Error())
+				return
+			}
+
+			handleResult(result)
 		},
 	}
 	valCmd.AddCommand(tcpCmd)
@@ -81,9 +110,11 @@ func Execute() {
 			}
 
 			httpReq.ContainerID = args[0]
-			if !strings.HasSuffix(httpReq.Port, "/tcp") {
-				httpReq.Port += "/tcp"
+			if !strings.HasSuffix(port, "/tcp") {
+				port += "/tcp"
 			}
+			httpReq.Port = port
+			httpReq.ValidateRequest = req
 			codes, err := parseValidCodes(responseCodes)
 			if err != nil {
 				log.Printf("Error parsing response codes: %s\n", err.Error())
@@ -97,15 +128,7 @@ func Execute() {
 				return
 			}
 
-			if !res.Valid {
-				log.Println("Container failed validation:")
-			} else {
-				log.Println("Container passed validation:")
-			}
-
-			for _, msg := range res.Messages {
-				log.Println(msg)
-			}
+			handleResult(res)
 		},
 	}
 	valCmd.AddCommand(httpCmd)
@@ -120,9 +143,11 @@ func Execute() {
 			}
 
 			httpReq.ContainerID = args[0]
-			if !strings.HasSuffix(httpReq.Port, "/tcp") {
-				httpReq.Port += "/tcp"
+			if !strings.HasSuffix(port, "/tcp") {
+				port += "/tcp"
 			}
+			httpReq.Port = port
+			httpReq.ValidateRequest = req
 			codes, err := parseValidCodes(responseCodes)
 			if err != nil {
 				log.Printf("Error parsing response codes: %s\n", err.Error())
@@ -136,15 +161,7 @@ func Execute() {
 				return
 			}
 
-			if !res.Valid {
-				log.Println("Container failed validation:")
-			} else {
-				log.Println("Container passed validation:")
-			}
-
-			for _, msg := range res.Messages {
-				log.Println(msg)
-			}
+			handleResult(res)
 		},
 	}
 	valCmd.AddCommand(httpsCmd)
