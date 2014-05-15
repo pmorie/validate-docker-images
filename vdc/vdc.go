@@ -25,10 +25,10 @@ func parseValidCodes(input string) ([]int, error) {
 	return intPorts, nil
 }
 
-func validateHttpArgs(httpReq vdc.ValidateHttpRequest, responseCodes string) bool {
+func validateHttpArgs(port string, responseCodes string) bool {
 	ok := true
 
-	if httpReq.Port == "" {
+	if port == "" {
 		log.Println("You must specify a port to check")
 		ok = false
 	}
@@ -105,7 +105,7 @@ func Execute() {
 		Short: "Test http connectivity to a container",
 		Long:  "Test http connectivity to a container",
 		Run: func(cmd *cobra.Command, args []string) {
-			if !validateHttpArgs(httpReq, responseCodes) {
+			if !validateHttpArgs(port, responseCodes) {
 				return
 			}
 
@@ -138,7 +138,7 @@ func Execute() {
 		Short: "Test https connectivity to a container",
 		Long:  "Test https connectivity to a container",
 		Run: func(cmd *cobra.Command, args []string) {
-			if !validateHttpArgs(httpReq, responseCodes) {
+			if !validateHttpArgs(port, responseCodes) {
 				return
 			}
 
