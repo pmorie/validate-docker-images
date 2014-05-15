@@ -5,6 +5,7 @@ import (
 	_ "net/http/pprof"
 	"strconv"
 	"strings"
+	"fmt"
 
 	vdc "github.com/pmorie/validate-docker-images"
 	"github.com/spf13/cobra"
@@ -41,6 +42,22 @@ func validateHttpArgs(port string, responseCodes string) bool {
 	return ok
 }
 
+func validateMysqlArgs(username string, password string) bool {
+	ok := true
+
+	if username == "" {
+		log.Println("You must specify a username to access the mysql DB")
+		ok = false
+	}
+
+	if password == "" {
+		log.Println("You must specify a password to access the mysql DB")
+		ok = false
+	}
+
+	return ok
+}
+
 func handleResult(result *vdc.ValidateResult) {
 	if !result.Valid {
 		log.Println("Container failed validation:")
@@ -60,6 +77,10 @@ func Execute() {
 		req           vdc.ValidateRequest
 		httpReq       vdc.ValidateHttpRequest
 		tcpReq        vdc.ValidateTcpRequest
+		mysqlReq      vdc.ValidateMysqlRequest
+
+		dbUsername    string
+		dbPassword    string
 	)
 
 	valCmd := &cobra.Command{
@@ -76,6 +97,9 @@ func Execute() {
 	valCmd.PersistentFlags().StringVar(&(httpReq.Path), "P", "", "Specify a path to validate with an HTTP request")
 	valCmd.PersistentFlags().StringVarP(&responseCodes, "responseCodes", "c", "", "A comma-delimited list of response codes")
 	valCmd.PersistentFlags().StringVarP(&(httpReq.Title), "title", "t", "", "Specify an HTML title to validate against")
+
+	valCmd.PersistentFlags().StringVarP(&dbUsername, "dbUsername", "u", "", "Specify username for DB connection")
+	valCmd.PersistentFlags().StringVarP(&dbPassword, "dbPassword", "w", "", "Specify user password for DB connection")
 
 	tcpCmd := &cobra.Command{
 		Use:   "tcp CONTAINER_ID PORT",
@@ -165,6 +189,32 @@ func Execute() {
 		},
 	}
 	valCmd.AddCommand(httpsCmd)
+
+	mysqlCmd := &cobra.Command{
+		Use:   "mysql <container id>",
+		Short: "Test mysql connectivity to a container",
+		Long:  "Test mysql connectivity to a container",
+		Run: func(cmd *cobra.Command, args []string) {
+			if !validateMysqlArgs(dbUsername, dbPassword) {
+				return
+			}
+
+			mysqlReq.Username = dbUsername
+			mysqlReq.Password = dbPassword
+			mysqlReq.ValidateRequest = req
+			mysqlReq.ContainerID = args[0]
+
+			res, err := vdc.ValidateMysql(httpReq, mysqlReq)
+			if err != nil {
+				message := fmt.Sprintf("---> %s\n", err.Error())
+				res.Messages = append(res.Messages, message)
+			}
+
+			handleResult(res)
+		},
+	}
+	valCmd.AddCommand(mysqlCmd)
+
 	valCmd.Execute()
 }
 
