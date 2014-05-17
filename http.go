@@ -49,12 +49,10 @@ func (req ValidateHttpRequest) validate() error {
 }
 
 func (req ValidateHttpRequest) log() {
-	if req.Verbose {
-		log.Printf("Port: %s\n", req.Port)
-		log.Printf("Path: %s\n", req.Path)
-		log.Printf("Title: %s\n", req.Title)
-		log.Printf("Allowed responses: %+v\n", req.Responses)
-	}
+	log.Printf("Port: %s\n", req.Port)
+	log.Printf("Path: %s\n", req.Path)
+	log.Printf("Title: %s\n", req.Title)
+	log.Printf("Allowed responses: %+v\n", req.Responses)
 }
 
 func ValidateHttp(req ValidateHttpRequest) (*ValidateResult, error) {
@@ -79,7 +77,10 @@ func validateHttp(req ValidateHttpRequest, secure bool) (*ValidateResult, error)
 		return nil, err
 	}
 
-	req.log()
+	if req.Verbose {
+		req.log()
+	}
+
 	result := &ValidateResult{Valid: true}
 
 	dockerClient, err := docker.NewClient(req.DockerSocket)
